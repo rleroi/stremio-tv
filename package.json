@@ -1,0 +1,19 @@
+{
+  "name": "stremio-tv",
+  "version": "1.0.0",
+  "description": "Stremio add-on for Arconaitv.us streams",
+  "main": "stremio-tv.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.18.0",
+    "cheerio": "^1.0.0-rc.2",
+    "node-html-parser": "^1.1.11",
+    "safe-eval": "^0.4.1",
+    "stremio-addon-sdk": "^0.6.4",
+    "striptags": "^3.1.1"
+  }
+}
