@@ -3,11 +3,14 @@ const axios = require('axios');
 const striptags = require('striptags'); // not perfect, doesn't strip html entities. try 'he' ?
 const addonSdk = require('stremio-addon-sdk');
 const safeEval = require('safe-eval');
+const fs = require('fs')
 
 /*
 TODO:
-- streams, stream id as index.
-- replace eval with safe-eval or secure-eval https://www.npmjs.com/package/safe-eval
+- NOT WORKING in stremio, stops after a few seconds. m3u8 file contains ts files that are only valid for a few seconds (ts segment files), VLC seems to reload the m3u8 file, stremio doesn't.
+    - does stremio use hls.js? https://github.com/video-dev/hls.js/issues/1850
+    - In vlc it works, but only if you use the option :http-user-agent="" to remove 'VLC' from the user-agent.
+- replace eval with safe-eval. safe-eval doesn't work yet
 */
 
 const baseUrl = 'https://www.arconaitv.us';
@@ -58,8 +61,10 @@ var manifest = {
     ],
 
     // prefix of item IDs (ie: "tt0032138")
-    "idPrefixes": [ "arc" ],
+    "idPrefixes": [ "atv" ],
 };
+
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0; // accept self-signed certs
 
 addon = new addonSdk(manifest);
 
@@ -72,22 +77,22 @@ axios.get(baseUrl)
     streams.featured = root.querySelectorAll('.stream-list-featured a.poster-link');
     streams.featured.forEach((value, index) => {
         //var poster = baseUrl+value.querySelector('img').attributes.src;
-        streams.featured[index] = {id: 'arc:'+index, name: value.attributes.title, genres: ['tv'], type: 'featured', page: baseUrl+'/'+value.attributes.href, /*poster: poster, background: poster, overview: 'overview',*/ description: 'description'};
+        streams.featured[index] = {id: 'atv:featured:'+index, name: value.attributes.title, genres: ['tv'], type: 'tv', page: baseUrl+'/'+value.attributes.href, poster: '', background: noPoster, videos: [{id: 0, title: 'title', thumbnail: noPoster, publishedAt: new Date(), streams: [{url: 'https://'}]}], description: 'description'};
     });
 
     streams.shows = root.querySelectorAll('#shows .box-content a');
     streams.shows.forEach((value, index) => {
-        streams.shows[index] = {id: 'arc:'+index, name: value.attributes.title, genres: ['tv'], type: 'shows', page: baseUrl+'/'+value.attributes.href, /*poster: noPoster, background: noPoster, overview: 'overview',*/ description: 'description'};
+        streams.shows[index] = {id: 'atv:shows:'+index, name: value.attributes.title, genres: ['tv'], type: 'tv', page: baseUrl+'/'+value.attributes.href, poster: '', background: noPoster, videos: [{id: 0, title: 'title', thumbnail: noPoster, publishedAt: new Date(), streams: [{url: 'https://'}]}], description: 'description'};
     });
 
     streams.movies = root.querySelectorAll('#movies .box-content a');
     streams.movies.forEach((value, index) => {
-        streams.movies[index] = {id: 'arc:'+index, name: value.attributes.title, genres: ['tv'], type: 'movies', page: baseUrl+'/'+value.attributes.href, /*poster: noPoster, background: noPoster, overview: 'overview',*/ description: 'description'};
+        streams.movies[index] = {id: 'atv:movies:'+index, name: value.attributes.title, genres: ['tv'], type: 'tv', page: baseUrl+'/'+value.attributes.href, poster: '', background: noPoster, videos: [{id: 0, title: 'title', thumbnail: noPoster, publishedAt: new Date(), streams: [{url: 'https://'}]}], description: 'description'};
     });
 
     streams.cable = root.querySelectorAll('#cable .box-content a');
     streams.cable.forEach((value, index) => {
-        streams.cable[index] = {id: 'arc:'+index, name: value.attributes.title, genres: ['tv'], type: 'cable', page: baseUrl+'/'+value.attributes.href, /*poster: noPoster, background: noPoster, overview: 'overview',*/ description: 'description'};
+        streams.cable[index] = {id: 'atv:cable:'+index, name: value.attributes.title, genres: ['tv'], type: 'tv', page: baseUrl+'/'+value.attributes.href, poster: '', background: noPoster, videos: [{id: 0, title: 'title', thumbnail: noPoster, publishedAt: new Date(), streams: [{url: 'https://'}]}], description: 'description'};
     });
 
     //console.log(streams);
@@ -115,47 +120,50 @@ addon.defineCatalogHandler((args, cb) => {
     } else if(args.id == 'cable') {
         cb(null, {metas: streams.cable});
     }    
-})
+});
 
 // Meta
 addon.defineMetaHandler((args, cb) => {
     console.log('meta', args);
 
+    var id = args.id.split(':');
 
-    // if(args.id == 'featured') {
-    //     cb(null, {metas: streams.featured});
-    // } else if(args.id == 'shows') {
-    //     cb(null, {metas: streams.shows});
-    // } else if(args.id == 'movies') {
-    //     cb(null, {metas: streams.movies});
-    // } else if(args.id == 'cable') {
-    //     cb(null, {metas: streams.cable});
-    // }
+    if(id.length < 3) {
+        cb(null, {meta: {}});
+        return;
+    }
+
+    if(id[1] == 'featured') {
+        return cb(null, {metas: streams.featured[id[2]]});
+    } else if(id[1] == 'shows') {
+        return cb(null, {metas: streams.shows[id[2]]});
+    } else if(id[1] == 'movies') {
+        cb(null, {metas: streams.movies[id[2]]});
+    } else if(id[1] == 'cable') {
+        return cb(null, {metas: streams.cable[id[2]]});
+    }
 
     cb(null, {meta: {}});
-
-    // var dataset = {
-    //     id: args.id,
-    //     name: cache[args.id].name,
-    //     overview: cache[args.id].overview,
-    //     description: cache[args.id].overview,
-    //     genres: cache[args.id].genres,
-    //     type: 'series',
-    //     poster: cache[args.id].poster,
-    //     background: cache[args.id].background,
-    //     videos: videos,
-    //     isPeered: true
-    // };
-
-    // return dataset;
 });
+
+
+
 
 // Streaming
 addon.defineStreamHandler((args, cb) => {
     console.log('stream', args);
 
-    console.log('getting '+streams.featured[0].page);
-    axios.get(streams.featured[0].page)
+    console.log('id', args.id);
+
+    var id = args.id.split(':');
+
+    if(id.length < 3) {
+        cb(null, {streams: []});
+        return;
+    }
+
+    console.log('getting '+streams[id[1]][id[2]].page);
+    axios.get(streams[id[1]][id[2]].page)
     .then((r) => {
 
         const root = html.parse(r.data, {script: true});
@@ -169,39 +177,64 @@ addon.defineStreamHandler((args, cb) => {
 
         // initialize eval environment
         var code = `
+        let url;
         var videojs = (x) => {
-            return {src: (y) => {return y.src;}, play: (z) => {return 'z'}};
-        }
+            return {src: (y) => {url = y.src;}, play: (z) => {return url}};
+        };
         videojs.Hls = {xhr: {beforeRequest: function() {}}};
-        var document = {getElementsByTagName: (tag) => {return [{volume: 1.0}]}};`
+        var document = {getElementsByTagName: (tag) => {return [{volume: 1.0}]}};
+        `
 
         // eval!
-        console.log('eval:', safeEval(code+scripts[8].text));
+        console.log('eval:', url = eval(code+scripts[8].text));
 
-        var streams = [
-            {
-                name: 'ArconaiTV',
-                title: 'url',
-                url: url,
-                tag: ['tag'],
-                //isFree: 1
-            }
-        ];
+        axios.get(url)
+        .then((r) => {
+            var data = r.data;
+            
+            data = data.replace(/#EXTINF/g,
+            `#EXT-X-DISCONTINUITY
+#EXTINF`);
 
-        cb(null, {streams: streams});
+            console.log(data)
 
-        console.log(streams);
+            fs.writeFile("public/stream.m3u8", data, function(err) {
+                if(err) {
+                    return console.log(err);
+                }
+
+                console.log("The file was saved!");
+            });
+
+            let streamUrls = [
+                {
+                    name: 'ArconaiTV',
+                    title: streams[id[1]][id[2]].name,
+                    url: 'file:///D:/Projects/Node/stremio-tv/public/stream.m3u8',
+                    tag: ['tv'],
+                    description: 'desc',
+                    //isFree: 1
+                }
+            ];
+
+            cb(null, {streams: streamUrls});
+
+            //console.log(streamUrls);
+
+        })
+        .catch((e) => {
+            console.log(e);
+        })
 
     })
     .catch((e) => {
         console.log(e);
     })
-})
+});
 
 if (module.parent) {
     module.exports = addon
 } else {
     //addon.publishToCentral('https://tv.ers.pw/manifest.json')
-
     addon.runHTTPWithOptions({ port: 7001 });
 }
